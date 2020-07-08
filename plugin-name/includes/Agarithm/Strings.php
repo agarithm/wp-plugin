@@ -9,8 +9,6 @@
 
 namespace Agarithm;
 
-require_once(dirname(__FILE__)."/Logger.php");
-
 class Strings {
 
 	public static function isEmpty($needle){
@@ -143,7 +141,7 @@ class Strings {
 		//DEV SYSTEMS ARE NOT static::RedactED
 		if(CLEAN::GET('IS_DEV' ))return $arr;
 
-		if(!isset($mask)) $mask = __('[redacted]');
+		if(!isset($mask)) $mask = '[redacted]';
 
 		$parse_query = function($q){
 			$out = array(); //PHP7 need to supply the destination output array
@@ -174,7 +172,7 @@ class Strings {
 
 		$allowed = is_array($allowed) ? $allowed : array();
 
-		$blocked = array('name','salutation', 'honorific','first','last','middle','initial','title'
+		$blocked = array('name','salutation', 'honorific','first','last','middle','initial','title','user'
 			,'phone','mail','mobile','home','work'
 			,'number','street','address','unit','apartment','apt'
 			,'city','town'
@@ -189,8 +187,8 @@ class Strings {
 		);
 
 		$hide = function ($key) use ($blocked,$allowed){
-			$rtn = array_reduce($blocked,function($carry,$block){return ( $carry || static::Contains($key,$block,false) ) ? true : false;},false);
-			$rtn = array_reduce($allowed,function($carry,$allow){return ( static::Same($key,$allow,false) ) ? false : $carry;} ,$rtn);
+			$rtn = array_reduce($blocked,function($carry,$block)use($key){return ( $carry || static::Contains($key,$block,false) ) ? true : false;},false);
+			$rtn = array_reduce($allowed,function($carry,$allow)use($key){return ( static::Same($key,$allow,false) ) ? false : $carry;} ,$rtn);
 			return $rtn;
 		};
 

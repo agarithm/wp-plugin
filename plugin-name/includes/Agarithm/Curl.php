@@ -1,8 +1,6 @@
 <?php
 namespace Agarithm;
 
-require_once(dirname(__FILE__)."Agarithm.php");
-
 function CURL_GET($url, $timeout=10, $options=array() ){
 
 	$conn = curl_init();

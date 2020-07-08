@@ -1,8 +1,6 @@
 <?php
 namespace Agarithm;
 
-require_once(dirname(__FILE__)."/../Agarithm.php");
-
 //////////////////////////////////////////////////////////////////////////////////////////
 // Copyright Mike Agar 2014
 // MIT License
@@ -12,8 +10,8 @@ class DB extends Singleton {
 		global $wpdb;
 		//Expose protected mysqli DB Handle from inside $wpdb
 		//see https://stackoverflow.com/a/41697102
-		$this->DB = \Closure::bind(function(){return $this->dbh;},$wpdb,'wpdb')();
-		$this->DB_PREFIX = $wpdb->prefix;
+		$this->DB = isset($wpdb) ? \Closure::bind(function(){return $this->dbh;},$wpdb,'wpdb')() : null;
+		$this->DB_PREFIX = isset($wpdb) ? $wpdb->prefix : '';
 		$this->DB_DEBUG = false;
 		$this->DB_QUERY_COUNT = 0;
 		$this->DB_QUERY_TIME = 0.0;
@@ -93,6 +91,9 @@ class DB extends Singleton {
 	private static function FixObjectErrors($obj,$class,$tableName,$primaryKeyName,$callback){
 		$DB = static::instance();
 
+		//If no DB connection, quit.
+		if(!isset($DB->DB))return false;
+
 		//Clear the Memoizers, we're going to be messing with things...
 		Memo::Clear();
 
@@ -156,12 +157,15 @@ class DB extends Singleton {
 
 	public static function Escape($sql){
 		$DB = static::instance();
-		return isset($DB->DB) ? mysqli_real_escape_string($DB->DB,$sql) : "";
+		return isset($DB->DB) ? mysqli_real_escape_string($DB->DB,$sql) : $sql;
 	}
 
 	//Requires that the Object vars and the Table schema match exactly!
 	public static function InsertObject($obj,$class,$tableName,$primaryKeyName="99"){
 		$DB = static::instance();
+
+		//If no DB connection, quit.
+		if(!isset($DB->DB))return 0;
 
 		//Modifing an Object Table, clear all memoized results
 		Memo::Clear();
@@ -178,21 +182,26 @@ class DB extends Singleton {
 			}
 			$cmd1 .= "`$key`";
 			if(strpos($key,$primaryKeyName)===FALSE){
-				$cmd2 .= "'".static::Escape($obj->$key)."'";
+				$cmd2 .= "'".$DB->Escape($obj->$key)."'";
 			}else{
 				$cmd2 .= "NULL";
 			}
 		}
 		$cmd1 .= " ) ";
 		$cmd2 .= " ) ";
-		$result = static::Query($cmd.$cmd1.$cmd2);
-		if(!$result)$result = static::FixObjectErrors($obj,$class,$tableName,$primaryKeyName,"InsertObject");
+		$result = $DB->Query($cmd.$cmd1.$cmd2);
+		if(!$result)$result = $DB->FixObjectErrors($obj,$class,$tableName,$primaryKeyName,"InsertObject");
 
 		return isset($DB->DB) ? mysqli_insert_id($DB->DB) : 0;
 	}
 
 	//Requires that the Object vars and the Table schema match exactly!
 	public static function UpdateObject($obj,$class,$tableName,$primaryKeyName){
+		$DB = static::instance();
+
+		//If no DB connection, quit.
+		if(!isset($DB->DB))return false;
+
 		//Modifing an Object Table, clear all memoized results
 		Memo::Clear();
 
@@ -203,28 +212,38 @@ class DB extends Singleton {
 				if($loopCounter++){
 					$cmd .= ", ";
 				}
-				$cmd .= "`$key`"."='".static::Escape($obj->$key)."'";
+				$cmd .= "`$key`"."='".$DB->Escape($obj->$key)."'";
 			}
 		}
-		$cmd .= " WHERE `".static::Escape($primaryKeyName)."`='".static::Escape($obj->$primaryKeyName)."'";
+		$cmd .= " WHERE `".$DB->Escape($primaryKeyName)."`='".$DB->Escape($obj->$primaryKeyName)."'";
 
-		$result = static::Query($cmd);
+		$result = $DB->Query($cmd);
 
-		if(!$result)$result = static::FixObjectErrors($obj,$class,$tableName,$primaryKeyName,"UpdateObject");
+		if(!$result)$result = $DB->FixObjectErrors($obj,$class,$tableName,$primaryKeyName,"UpdateObject");
 
 		return $result;
 	}
 
 	public static function DeleteObject($obj,$class,$tableName,$primaryKeyName){
+		$DB = static::instance();
+
+		//If no DB connection, quit.
+		if(!isset($DB->DB))return false;
+
 		$cmd  = "DELETE FROM `$tableName`";
-		$cmd .= " WHERE `".static::Escape($primaryKeyName)."`='".static::Escape($obj->$primaryKeyName)."'";
-		$result = static::Query($cmd);
+		$cmd .= " WHERE `".$DB->Escape($primaryKeyName)."`='".$DB->Escape($obj->$primaryKeyName)."'";
+		$result = $DB->Query($cmd);
 		//Modified an Object Table, clear all memoized results
 		Memo::Clear();
 		return $result;
 	}
 
 	public static function GetResultAsArray($result){
+		$DB = static::instance();
+
+		//If no DB connection, quit.
+		if(!isset($DB->DB))return array();
+
 		$out = array();
 		if($result && mysqli_num_rows($result)>0){
 			while($row = mysqli_fetch_assoc($result)){
@@ -237,9 +256,12 @@ class DB extends Singleton {
 	public static function AddObjectIndex($className,$tableName,$keyName,$sort=""){
 		$DB = static::instance();
 
+		//If no DB connection, quit.
+		if(!isset($DB->DB))return false;
+
 		$rtn = true; //Always Success
 
-		if(isset($DB->DB_AUTO_INSTALL) && $DB->DB_AUTO_INSTALL && static::IsATable($tableName)){
+		if(isset($DB->DB_AUTO_INSTALL) && $DB->DB_AUTO_INSTALL && $DB->IsATable($tableName)){
 			$rtn = false; //only ever return failures if AUTO INSTALL is turned on.
 
 			$obj = new $className();
@@ -267,8 +289,8 @@ class DB extends Singleton {
 				//check and create once
 
 				$cmd = "SHOW INDEX FROM `$tableName` WHERE Key_name='$idxName'";
-				$result = static::Query($cmd);
-				$rows = static::GetResultAsArray($result);
+				$result = $DB->Query($cmd);
+				$rows = $DB->GetResultAsArray($result);
 				if(count($rows)==0){
 					//Missing: Add the index
 					WARN("DB: Adding index $idxName");
@@ -311,17 +333,20 @@ class DB extends Singleton {
 	public static function GetObjects($className,$tableName,$keyName="",$id="", $sortKey="",$sortOrder="DESC"){
 		$DB = static::instance();
 
+		//If no DB connection, quit.
+		if(!isset($DB->DB))return array();
+
 		$out = Memo::Get(__METHOD__.json_encode(func_get_args()));
 		if(!empty($out))return $out;
 
 		//Fall thru and build the $out
 		$out = array();
 
-		$cmd  = "SELECT * FROM `".static::Escape($tableName)."`";
-		if($id)$cmd .= " WHERE `".static::Escape($keyName)."`='".static::Escape($id)."'";
+		$cmd  = "SELECT * FROM `".$DB->Escape($tableName)."`";
+		if($id)$cmd .= " WHERE `".$DB->Escape($keyName)."`='".$DB->Escape($id)."'";
 
 		if($sortKey){
-			$sortKey = static::Escape($sortKey);
+			$sortKey = $DB->Escape($sortKey);
 			$sortOrder = strtoupper($sortOrder)=="DESC" ? "DESC" : "ASC" ;
 			$cmd .= " ORDER BY `$sortKey` $sortOrder";
 		}
@@ -340,7 +365,7 @@ class DB extends Singleton {
 
 		if($DB->DB_QUERY_SLOW && $id){
 			//Add an index, cuz this was slow...
-			static::AddObjectIndex($className,$tableName,$keyName);
+			$DB->AddObjectIndex($className,$tableName,$keyName);
 		}
 
 		//Memoize this
@@ -349,7 +374,10 @@ class DB extends Singleton {
 
 
 	public static function GetLikeObjects($className,$tableName,$keyName="",$id="", $sortKey="", $sortOrder="DESC"){
-		static $memo = false;
+		$DB = static::instance();
+
+		//If no DB connection, quit.
+		if(!isset($DB->DB))return array();
 
 		$out = Memo::Get(__METHOD__.json_encode(func_get_args()));
 		if(!empty($out))return $out;
@@ -357,16 +385,16 @@ class DB extends Singleton {
 		//Fall thru and build the $out
 		$out = array();
 
-		$cmd  = "SELECT * FROM `".static::Escape($tableName)."`";
-		if($id)$cmd .= " WHERE `".static::Escape($keyName)."` LIKE '%".static::Escape($id)."%'";
+		$cmd  = "SELECT * FROM `".$DB->Escape($tableName)."`";
+		if($id)$cmd .= " WHERE `".$DB->Escape($keyName)."` LIKE '%".$DB->Escape($id)."%'";
 
 		if($sortKey){
-			$sortKey = static::Escape($sortKey);
+			$sortKey = $DB->Escape($sortKey);
 			$sortOrder = strtoupper($sortOrder)=="DESC" ? "DESC" : "ASC" ;
 			$cmd .= " ORDER BY `$sortKey` $sortOrder";
 		}
 
-		$result = static::Query($cmd);
+		$result = $DB->Query($cmd);
 		if($result && mysqli_num_rows($result)>0){
 			//found you
 			while($what = mysqli_fetch_array($result,MYSQLI_ASSOC)){
@@ -385,11 +413,14 @@ class DB extends Singleton {
 	public static function ShowTables(){
 		$DB = static::instance();
 
+		//If no DB connection, quit.
+		if(!isset($DB->DB))return array();
+
 		if($tables = Memo::Get(__METHOD__))return $tables;
 
 		$tables = array();
 		if($DB->DB_DEBUG)TRACE("ShowTables(): Building Table List Cache");
-		$result = static::Query( "show tables");
+		$result = $DB->Query( "show tables");
 		while(list($tName) = mysqli_fetch_row($result)){
 			$tables[] = $tName;
 		}
@@ -398,19 +429,29 @@ class DB extends Singleton {
 	}
 
 	public static function RepairTables(){
+		$DB = static::instance();
+
+		//If no DB connection, quit.
+		if(!isset($DB->DB))return true;
+
 		$rtn = true;
 		foreach (static::ShowTables() as $table) {
 			$cmd = "repair table `$table`";
-			$rtn &= static::Query($cmd) !== false;
+			$rtn &= $DB->Query($cmd) !== false;
 		}
 		return $rtn;
 	}
 
 	public static function FindPrimaryKeys($search="_ID"){ //ORM Convention is to tag PK and FK with "_ID" suffix
 		$out = array();
-		foreach(static::ShowTables() as $tableName){
-			$result = static::Query("SHOW COLUMNS FROM `$tableName`");
-			foreach (static::GetResultAsArray($result) as $data) {
+		$DB = static::instance();
+
+		//If no DB connection, quit.
+		if(!isset($DB->DB))return $out;
+
+		foreach($DB->ShowTables() as $tableName){
+			$result = $DB->Query("SHOW COLUMNS FROM `$tableName`");
+			foreach ($DB->GetResultAsArray($result) as $data) {
 				if($data["Key"]=="PRI" && $data["Extra"]=="auto_increment"){
 					if(strlen($search)){
 						if(StartsWith($data["Field"],$search) || EndsWith($data["Field"],$search)){
@@ -427,9 +468,14 @@ class DB extends Singleton {
 
 	public static function FindForeignKeys($fk){
 		$out = array();
-		foreach(static::ShowTables() as $tableName){
-			$result = static::Query("SHOW COLUMNS FROM `$tableName`");
-			foreach (static::GetResultAsArray($result) as $data) {
+		$DB = static::instance();
+
+		//If no DB connection, quit.
+		if(!isset($DB->DB))return $out;
+
+		foreach($DB->ShowTables() as $tableName){
+			$result = $DB->Query("SHOW COLUMNS FROM `$tableName`");
+			foreach ($DB->GetResultAsArray($result) as $data) {
 				if($data["Extra"]!="auto_increment" && $data["Field"]==$fk)$out[$tableName] = $data["Field"];
 			}
 		}
@@ -438,11 +484,16 @@ class DB extends Singleton {
 
 	public static function FindIndexes($tableName){
 		$out = array();
-		$tableName = static::Escape($tableName);
-		foreach (static::GetResultAsArray(static::Query("show columns from `$tableName`")) as $row1) {
+		$DB = static::instance();
+
+		//If no DB connection, quit.
+		if(!isset($DB->DB))return $out;
+
+		$tableName = $DB->Escape($tableName);
+		foreach ($DB->GetResultAsArray($DB->Query("show columns from `$tableName`")) as $row1) {
 			$colname = $row1["Field"];
 			$index = false;
-			foreach (static::GetResultAsArray(static::Query("show indexes from `$tableName`")) as $row2){
+			foreach ($DB->GetResultAsArray($DB->Query("show indexes from `$tableName`")) as $row2){
 				$indexName = $row2["Key_name"];
 				if($row2["Column_name"]==$colname && $indexName!="PRIMARY")$index = $indexName;
 			}
@@ -458,9 +509,13 @@ class DB extends Singleton {
 		$DB = static::instance();
 
 		$rtn = false;
+		
+		//If no DB connection, quit.
+		if(!isset($DB->DB))return $rtn;
+
 
 		if(isset($DB->DB_AUTO_INSTALL)&&$DB->DB_AUTO_INSTALL){
-			$tables = static::ShowTables();
+			$tables = $DB->ShowTables();
 			$end = count($tables);
 			for($i=0; $i<$end ; $i++){
 				if(stristr($tables[$i],$search)!==false||stristr($search,$tables[$i])!==false){
@@ -482,8 +537,12 @@ class DB extends Singleton {
 		//Takes the search string and looks to see if it matches a table name Exactly.
 		$DB = static::instance();
 		$rtn = false;
+		
+		//If no DB connection, quit.
+		if(!isset($DB->DB))return $rtn;
+
 		if(isset($DB->DB_AUTO_INSTALL)&&$DB->DB_AUTO_INSTALL){
-			$tables = static::ShowTables();
+			$tables = $DB->ShowTables();
 			$rtn = in_array($search, $tables);
 			if($DB->DB_DEBUG&&!$rtn)TRACE("IsATable() Did not find ( $search ) in table list.");
 		}
@@ -493,9 +552,9 @@ class DB extends Singleton {
 	public static function IsAColumn($tableName,$columnName){
 		$DB = static::instance();
 
-		if(isset($DB->DB_AUTO_INSTALL)&&$DB->DB_AUTO_INSTALL){
+		if(isset($DB->DB) && isset($DB->DB_AUTO_INSTALL)&&$DB->DB_AUTO_INSTALL){
 			$cmd = "SHOW COLUMNS FROM `$tableName`";
-			$result = static::Query($cmd);
+			$result = $DB->Query($cmd);
 			if($result){
 				while(list($cName) = mysqli_fetch_row($result)){
 					if($cName==$columnName)return true;
@@ -508,7 +567,7 @@ class DB extends Singleton {
 	public static function CreateTableFromClass($class,$table,$primaryKey){
 		$DB = static::instance();
 
-		if(isset($DB->DB_AUTO_INSTALL)&&$DB->DB_AUTO_INSTALL&&!static::IsATable($table)){
+		if(isset($DB->DB) && isset($DB->DB_AUTO_INSTALL)&&$DB->DB_AUTO_INSTALL&&!static::IsATable($table)){
 			if($DB->DB_DEBUG)TRACE("CreateTableFromClass($class): Missing table, creating it now.");
 			$cmd = "CREATE TABLE IF NOT EXISTS `$table` (";
 			foreach (get_class_vars($class) as $key => $value) {
@@ -536,7 +595,7 @@ class DB extends Singleton {
 
 			$cmd .= " PRIMARY KEY (`$primaryKey`))";
 			$cmd .= " ENGINE = InnoDB";
-			static::Query($cmd,$DB->DB_DEBUG);
+			$DB->Query($cmd,$DB->DB_DEBUG);
 
 			//Added a new table, better clear the table list cache
 			Memo::Clear();
@@ -551,9 +610,9 @@ class DB extends Singleton {
 		$rtn = false;
 
 		WARN(__METHOD__." $table");
-		if(isset($DB->DB_AUTO_INSTALL)&&$DB->DB_AUTO_INSTALL){
+		if(isset($DB->DB) && isset($DB->DB_AUTO_INSTALL)&&$DB->DB_AUTO_INSTALL){
 			$cmd = "drop table `$table`";
-			$err = static::Query($cmd);
+			$err = $DB->Query($cmd);
 			WARN("DropTable(): $cmd <br>");
 			$rtn = true;
 			Memo::Clear();
@@ -570,10 +629,10 @@ class DB extends Singleton {
 
 		$rtn = false;
 
-		if(isset($DB->DB_AUTO_INSTALL)&&$DB->DB_AUTO_INSTALL){
-			$tables = static::ShowTables();
+		if(isset($DB->DB) && isset($DB->DB_AUTO_INSTALL)&&$DB->DB_AUTO_INSTALL){
+			$tables = $DB->ShowTables();
 			foreach($tables as $table){
-				if(strpos($table,$search)!==false)$rtn = static::DropTable($table);
+				if(strpos($table,$search)!==false)$rtn = $DB->DropTable($table);
 			}
 		}
 

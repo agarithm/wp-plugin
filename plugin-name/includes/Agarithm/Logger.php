@@ -1,11 +1,6 @@
 <?php
 namespace Agarithm;
 
-require_once(dirname(__FILE__)."/Singleton.php");
-require_once(dirname(__FILE__)."/Strings.php");
-
-
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // LOGGER
 class LOGGER extends Singleton{
@@ -60,8 +55,9 @@ class LOGGER extends Singleton{
 		$l->log[] = array('level'=>$level,'line'=>$line);
 
 		//Comand line should echo to the console now...
-		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+		if ((php_sapi_name() == "cli") || ( defined( 'WP_CLI' ) && WP_CLI )) {
 			if($level>=$l->level)echo $line.PHP_EOL;
+			flush();
 		}
 
 		return "$level $message";

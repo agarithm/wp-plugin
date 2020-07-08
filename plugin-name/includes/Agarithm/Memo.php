@@ -1,7 +1,5 @@
 <?php
 namespace Agarithm;
-require_once(dirname(__FILE__)."/Singleton.php");
-
 
 //Master Memoizer Class enables a Global Reset which is needed for Testing and Long Running Workers
 class Memo extends Singleton{

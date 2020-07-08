@@ -1,8 +1,6 @@
 <?php
 namespace Agarithm;
 
-require_once(dirname(__FILE__)."/../Agarithm.php");
-
 class UI extends Singleton {
 	const debug = false;
 	public static $counter = 0;
@@ -64,7 +62,7 @@ class UI extends Singleton {
 		return HTML_ERROR_LOG($level);
 	}
 
-	public static function RenderArray($arr,$name="array"){
+	public static function RenderTextArray($arr,$name="array"){
 		//Handy little tool for debuggin & displaying multi dimensional arrays / objects
 		$out = "";
 
@@ -74,7 +72,7 @@ class UI extends Singleton {
 
 			foreach($arr as $key => $value){
 				if(is_array($value)||is_object($value)){
-					$out .= static::RenderArray($value,$name.$prefix($key));
+					$out .= static::RenderTextArray($value,$name.$prefix($key));
 				}else if(is_null($value)){
 					$out .=  $name.$prefix($key)." = (null)\n";
 				}else if(is_bool($value)){
@@ -87,7 +85,7 @@ class UI extends Singleton {
 		}else{
 			$out .= "$name = $arr\n";
 		}
-		return "<pre>\n$out</pre>\n";
+		return "$out";
 	}
 
 	public static function last($macro_csv){

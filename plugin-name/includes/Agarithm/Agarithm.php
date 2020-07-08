@@ -13,11 +13,10 @@ require_once(dirname(__FILE__)."/ORM/DB.php");
 
 //Syntactic Sugar
 function URL($link, $params = array(), $hashBangParams = array()) {return Strings::URL($link, $params, $hashBangParams);}
-
 function REDACT($arr,$allowed=false,$remove=false){return Strings::Redact($arr,$allowed,$remove);}
 
-function RenderArray($arr,$name='array',$allow=array()){return UI::RenderArray(REDACT($arr,$allow),$name);}
-function RenderTextArray($arr,$name='array',$allow=array()){return strip_tags(UI::RenderArray(REDACT($arr,$allow),$name));}
+function RenderArray($arr,$name='array',$allow=array()){return '<pre>'.RenderTextArray(REDACT($arr,$allow),$name).'</pre>';}
+function RenderTextArray($arr,$name='array',$allow=array()){return UI::RenderTextArray(REDACT($arr,$allow),$name);}
 
 if (!function_exists('array_random')) {
 	function array_random($arr, $num=1) {
@@ -168,7 +167,7 @@ class DIRTY {
 		$out = static::RAW($key);
 		if(is_scalar($out)){
 			//DB SQL Injection Protection
-			$out = DB::escape($out);
+			$out = DB::Escape($out);
 			//UI SSTI Protection
 			$out = UI::escape($out);
 		}
@@ -190,9 +189,8 @@ class CLEAN extends DIRTY {
 			$clean = array();
 			$clean += $_ENV;
 			$clean += $_SERVER;
-			$clean += $_SESSION;
+			if(isset($_SESSION))$clean += $_SESSION;
 
-			INFO(__METHOD__." = ".json_encode(REDACT($clean)));
 			Memo::Set(static::HASH(),$clean);
 		}
 		return is_scalar($key) ? FIND_VALUE_BY_KEY(Memo::Get(static::HASH()),$key) : Memo::Get(static::HASH());
