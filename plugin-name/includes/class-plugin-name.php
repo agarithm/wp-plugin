@@ -1,4 +1,7 @@
 <?php
+require_once( dirname( __FILE__ ) . "/Agarithm/Agarithm.php");
+
+use \Agarithm as A;
 
 /**
  * The file that defines the core plugin class
