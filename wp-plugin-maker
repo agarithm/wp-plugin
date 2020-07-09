@@ -1,8 +1,8 @@
 #!/usr/bin/php
 <?php
-require_once(dirname(__FILE__)."/plugin-name/includes/Agarithm/Agarithm.php");
+require_once(dirname(__FILE__)."/sample-plugin/includes/Agarithm/Agarithm.php");
 
-use Agarithm as A;
+use Agarithm\sample_plugin as A;
 
 function canonical($name){
 	$name = mb_strtolower($name);
@@ -44,7 +44,7 @@ while(empty($new_name)){
 }
 
 //Canonicalize the plugin name
-$old_name = canonical('plugin-name');
+$old_name = canonical('sample-plugin');
 $new_name = canonical($new_name);
 
 get_path:
